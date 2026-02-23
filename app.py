@@ -1,204 +1,151 @@
 import streamlit as st
-import pickle
-import pandas as pd
-import base64
 import requests
 import os
 
-# -------------------------------
-# Page Config
-# -------------------------------
-st.set_page_config(
-    page_title="IPL Win Predictor",
-    page_icon="🏏",
-    layout="centered"
-)
+# ==============================
+# CONFIG
+# ==============================
 
-# ✅ Backend URL from environment (IMPORTANT)
-API_BASE_URL = "https://ipl-win-predictor-api.onrender.com"
+BACKEND_URL = os.getenv("BACKEND_URL")
 
-if not API_URL:
-    st.error("❌ BACKEND_URL not set in environment variables.")
+if not BACKEND_URL:
+    st.error("❌ BACKEND_URL not set in environment variables")
     st.stop()
 
-# -------------------------------
-# Background Image Loader
-# -------------------------------
-def add_bg(image_file):
-    if os.path.exists(image_file):
-        with open(image_file, "rb") as f:
-            encoded = base64.b64encode(f.read()).decode()
+# ==============================
+# SESSION INIT
+# ==============================
 
-        st.markdown(
-            f"""
-            <style>
-            .stApp {{
-                background: url(data:image/jpg;base64,{encoded});
-                background-size: cover;
-                background-position: center;
-            }}
-            .glass {{
-                background: rgba(0, 0, 0, 0.7);
-                backdrop-filter: blur(10px);
-                padding: 30px;
-                border-radius: 20px;
-                color: white;
-            }}
-            .title {{
-                text-align: center;
-                font-size: 45px;
-                font-weight: 800;
-                color: #FFD700;
-                text-shadow: 2px 2px 10px black;
-            }}
-            .sub {{
-                text-align: center;
-                color: #eee;
-                margin-bottom: 30px;
-            }}
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
-
-add_bg("background.jpg")
-
-# -------------------------------
-# Session State Init
-# -------------------------------
 if "token" not in st.session_state:
     st.session_state.token = None
 
-# -------------------------------
-# Sidebar Authentication UI
-# -------------------------------
-st.sidebar.title("🔐 Authentication")
-mode = st.sidebar.radio("Select Mode", ["Login", "Register"])
+# ==============================
+# PAGE TITLE
+# ==============================
 
-username = st.sidebar.text_input("Username")
-password = st.sidebar.text_input("Password", type="password")
+st.set_page_config(page_title="IPL Win Predictor", layout="centered")
+st.title("🏏 IPL Win Probability Predictor")
 
-def safe_api_call(method, url, **kwargs):
-    try:
-        return requests.request(method, url, timeout=10, **kwargs)
-    except requests.exceptions.RequestException:
-        st.sidebar.error("❌ Backend is not reachable. Check backend service.")
-        st.stop()
+# ==============================
+# AUTH SECTION
+# ==============================
 
-# -------------------------------
-# Login
-# -------------------------------
-if mode == "Login":
-    if st.sidebar.button("Login"):
-        res = safe_api_call("post", f"{API_URL}/login", json={
-            "username": username,
-            "password": password
-        })
+if not st.session_state.token:
 
-        if res.status_code == 200:
-            st.session_state.token = res.json().get("access_token")
-            st.sidebar.success("Login successful 🎉")
-        else:
-            st.sidebar.error(res.json().get("detail", "Login failed"))
+    st.sidebar.title("🔐 Authentication")
+    auth_option = st.sidebar.radio("Choose option", ["Login", "Register"])
 
-# -------------------------------
-# Register
-# -------------------------------
-if mode == "Register":
-    if st.sidebar.button("Register"):
-        res = safe_api_call("post", f"{API_URL}/register", json={
-            "username": username,
-            "password": password
-        })
+    username = st.sidebar.text_input("Username")
+    password = st.sidebar.text_input("Password", type="password")
 
-        if res.status_code == 200:
-            st.sidebar.success("Registered successfully 🎉 Now login.")
-        else:
-            st.sidebar.error(res.json().get("detail", "Registration failed"))
+    # REGISTER
+    if auth_option == "Register":
+        if st.sidebar.button("Register"):
+            res = requests.post(
+                f"{BACKEND_URL}/register",
+                json={"username": username, "password": password}
+            )
 
-# -------------------------------
-# Logout
-# -------------------------------
-if st.session_state.token:
+            if res.status_code == 200:
+                data = res.json()
+                st.session_state.token = data.get("access_token")
+                st.sidebar.success("🎉 Registered & Logged in Successfully")
+                st.rerun()
+            else:
+                st.sidebar.error(res.json().get("detail", "Registration failed ❌"))
+
+    # LOGIN
+    if auth_option == "Login":
+        if st.sidebar.button("Login"):
+            res = requests.post(
+                f"{BACKEND_URL}/login",
+                json={"username": username, "password": password}
+            )
+
+            if res.status_code == 200:
+                data = res.json()
+                st.session_state.token = data.get("access_token")
+                st.sidebar.success("✅ Logged in Successfully")
+                st.rerun()
+            else:
+                st.sidebar.error("Invalid username or password ❌")
+
+# ==============================
+# MAIN APP (AFTER LOGIN)
+# ==============================
+
+else:
+
+    st.sidebar.success("🟢 Logged In")
     if st.sidebar.button("Logout"):
         st.session_state.token = None
-        st.sidebar.success("Logged out!")
+        st.rerun()
 
-# -------------------------------
-# Load Model
-# -------------------------------
-pipe = pickle.load(open('pipe.pkl','rb'))
+    st.subheader("Match Details")
 
-teams = [
-    "Chennai Super Kings", "Mumbai Indians", "Kolkata Knight Riders",
-    "Royal Challengers Bengaluru", "Delhi Capitals", "Sunrisers Hyderabad",
-    "Rajasthan Royals", "Punjab Kings", "Gujarat Titans", "Lucknow Super Giants"
-]
+    batting_team = st.selectbox("Batting Team", [
+        "Chennai Super Kings",
+        "Mumbai Indians",
+        "Royal Challengers Bangalore",
+        "Kolkata Knight Riders",
+        "Delhi Capitals",
+        "Rajasthan Royals",
+        "Sunrisers Hyderabad",
+        "Punjab Kings",
+        "Lucknow Super Giants",
+        "Gujarat Titans"
+    ])
 
-cities = [
-    'Hyderabad','Bangalore','Mumbai','Indore','Kolkata','Delhi','Chandigarh',
-    'Jaipur','Chennai','Cape Town','Port Elizabeth','Durban','Centurion',
-    'East London','Johannesburg','Kimberley','Bloemfontein','Ahmedabad',
-    'Cuttack','Nagpur','Dharamsala','Visakhapatnam','Pune','Raipur','Ranchi',
-    'Abu Dhabi','Sharjah','Mohali','Bengaluru'
-]
+    bowling_team = st.selectbox("Bowling Team", [
+        "Chennai Super Kings",
+        "Mumbai Indians",
+        "Royal Challengers Bangalore",
+        "Kolkata Knight Riders",
+        "Delhi Capitals",
+        "Rajasthan Royals",
+        "Sunrisers Hyderabad",
+        "Punjab Kings",
+        "Lucknow Super Giants",
+        "Gujarat Titans"
+    ])
 
-# -------------------------------
-# UI
-# -------------------------------
-st.markdown("<div class='title'>🏏 IPL Win Predictor</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub'>Predict your team’s victory in real-time</div>", unsafe_allow_html=True)
+    total_runs = st.number_input("Total Runs", min_value=0)
+    wickets = st.number_input("Wickets Fallen", min_value=0, max_value=10)
+    overs = st.number_input("Overs Completed", min_value=0.0)
+    runs_left = st.number_input("Runs Left", min_value=0)
+    balls_left = st.number_input("Balls Left", min_value=0)
+    wickets_left = st.number_input("Wickets Left", min_value=0, max_value=10)
+    target = st.number_input("Target", min_value=0)
 
-with st.container():
-    st.markdown("<div class='glass'>", unsafe_allow_html=True)
-
-    col1, col2 = st.columns(2)
-    with col1:
-        batting_team = st.selectbox("Batting Team", teams)
-    with col2:
-        bowling_team = st.selectbox("Bowling Team", teams)
-
-    city = st.selectbox("Host City", cities)
-
-    col3, col4, col5 = st.columns(3)
-    with col3:
-        target = st.number_input("Target", min_value=1)
-    with col4:
-        score = st.number_input("Current Score", min_value=0)
-    with col5:
-        overs = st.number_input("Overs Completed", min_value=0.1, max_value=20.0)
-
-    wickets = st.slider("Wickets Fallen", 0, 10, 2)
-
-    if st.button("🔥 Predict Match Outcome"):
-
-        if not st.session_state.token:
-            st.error("🔐 Please login first to predict!")
-            st.stop()
-
-        payload = {
-            "customer": {
-                "batting_team": batting_team,
-                "bowling_team": bowling_team,
-                "city": city,
-                "target": target,
-                "score": score,
-                "wickets": wickets,
-                "overs": overs
-            }
-        }
+    if st.button("Predict Win Probability"):
 
         headers = {
             "Authorization": f"Bearer {st.session_state.token}"
         }
 
-        res = safe_api_call("post", f"{API_URL}/predict/auth", json=payload, headers=headers)
+        payload = {
+            "customer": {
+                "batting_team": batting_team,
+                "bowling_team": bowling_team,
+                "total_runs": total_runs,
+                "wickets": wickets,
+                "overs": overs,
+                "runs_left": runs_left,
+                "balls_left": balls_left,
+                "wickets_left": wickets_left,
+                "target": target
+            }
+        }
+
+        res = requests.post(
+            f"{BACKEND_URL}/predict/auth",
+            json=payload,
+            headers=headers
+        )
 
         if res.status_code == 200:
             data = res.json()
-            st.success(f"🏆 {data['batting_team']} Win Chance: {data['win_probability']:.2f}%")
-            st.error(f"💔 {data['bowling_team']} Win Chance: {data['loss_probability']:.2f}%")
+            st.success(f"🏆 Win Probability: {round(data['win_probability']*100,2)}%")
+            st.info(f"❌ Loss Probability: {round(data['loss_probability']*100,2)}%")
         else:
-            st.error(res.json().get("detail", "Token expired or invalid."))
-
-    st.markdown("</div>", unsafe_allow_html=True)
+            st.error("Prediction failed ❌")
