@@ -15,7 +15,7 @@ if "username" not in st.session_state:
 # CONFIG
 # ==============================
 
-API_BASE_URL = "https://your-fastapi-service.onrender.com"  
+API_BASE_URL = "https://ipl-win-predictor-api.onrender.com"
 # 👆 yaha apna FastAPI backend URL daalna
 
 # ==============================
