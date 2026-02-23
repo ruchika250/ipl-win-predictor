@@ -74,9 +74,20 @@ mode = st.sidebar.radio("Select Mode", ["Login", "Register"])
 username = st.sidebar.text_input("Username")
 password = st.sidebar.text_input("Password", type="password")
 
+def safe_api_call(method, url, **kwargs):
+    try:
+        res = requests.request(method, url, timeout=5, **kwargs)
+        return res
+    except requests.exceptions.ConnectionError:
+        st.sidebar.error("❌ Backend API is not running on port 8000.")
+        st.stop()
+    except requests.exceptions.Timeout:
+        st.sidebar.error("⏱️ Backend API timed out.")
+        st.stop()
+
 if mode == "Login":
     if st.sidebar.button("Login"):
-        res = requests.post(f"{API_URL}/login", json={
+        res = safe_api_call("post", f"{API_URL}/login", json={
             "username": username,
             "password": password
         })
@@ -85,11 +96,14 @@ if mode == "Login":
             st.session_state.token = res.json()["access_token"]
             st.sidebar.success("Login successful 🎉")
         else:
-            st.sidebar.error("Invalid username or password")
+            try:
+                st.sidebar.error(res.json().get("detail", "Login failed"))
+            except Exception:
+                st.sidebar.error(f"API Error {res.status_code}: {res.text}")
 
 if mode == "Register":
     if st.sidebar.button("Register"):
-        res = requests.post(f"{API_URL}/register", json={
+        res = safe_api_call("post", f"{API_URL}/register", json={
             "username": username,
             "password": password
         })
@@ -97,7 +111,10 @@ if mode == "Register":
         if res.status_code == 200:
             st.sidebar.success("Registered successfully 🎉 Now login.")
         else:
-            st.sidebar.error(res.json()["detail"])
+            try:
+                st.sidebar.error(res.json().get("detail", "Registration failed"))
+            except Exception:
+                st.sidebar.error(f"API Error {res.status_code}: {res.text}")
 
 if st.session_state.token:
     if st.sidebar.button("Logout"):
@@ -172,13 +189,16 @@ with st.container():
             "Authorization": f"Bearer {st.session_state.token}"
         }
 
-        res = requests.post(f"{API_URL}/predict/auth", json=payload, headers=headers)
+        res = safe_api_call("post", f"{API_URL}/predict/auth", json=payload, headers=headers)
 
         if res.status_code == 200:
             data = res.json()
             st.success(f"🏆 {data['batting_team']} Win Chance: {data['win_probability']:.2f}%")
             st.error(f"💔 {data['bowling_team']} Win Chance: {data['loss_probability']:.2f}%")
         else:
-            st.error("❌ Token expired or invalid. Please login again.")
+            try:
+                st.error(res.json().get("detail", "Token expired or invalid. Please login again."))
+            except Exception:
+                st.error(f"API Error {res.status_code}: {res.text}")
 
     st.markdown("</div>", unsafe_allow_html=True)
