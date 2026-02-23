@@ -1,100 +1,204 @@
 import streamlit as st
+import pickle
+import pandas as pd
+import base64
 import requests
+import os
 
-# ==============================
+# -------------------------------
+# Page Config
+# -------------------------------
+st.set_page_config(
+    page_title="IPL Win Predictor",
+    page_icon="🏏",
+    layout="centered"
+)
+
+# ✅ Backend URL from environment (IMPORTANT)
+API_BASE_URL = "https://ipl-win-predictor-api.onrender.com"
+
+if not API_URL:
+    st.error("❌ BACKEND_URL not set in environment variables.")
+    st.stop()
+
+# -------------------------------
+# Background Image Loader
+# -------------------------------
+def add_bg(image_file):
+    if os.path.exists(image_file):
+        with open(image_file, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode()
+
+        st.markdown(
+            f"""
+            <style>
+            .stApp {{
+                background: url(data:image/jpg;base64,{encoded});
+                background-size: cover;
+                background-position: center;
+            }}
+            .glass {{
+                background: rgba(0, 0, 0, 0.7);
+                backdrop-filter: blur(10px);
+                padding: 30px;
+                border-radius: 20px;
+                color: white;
+            }}
+            .title {{
+                text-align: center;
+                font-size: 45px;
+                font-weight: 800;
+                color: #FFD700;
+                text-shadow: 2px 2px 10px black;
+            }}
+            .sub {{
+                text-align: center;
+                color: #eee;
+                margin-bottom: 30px;
+            }}
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+
+add_bg("background.jpg")
+
+# -------------------------------
 # Session State Init
-# ==============================
-
+# -------------------------------
 if "token" not in st.session_state:
     st.session_state.token = None
 
-if "username" not in st.session_state:
-    st.session_state.username = None
+# -------------------------------
+# Sidebar Authentication UI
+# -------------------------------
+st.sidebar.title("🔐 Authentication")
+mode = st.sidebar.radio("Select Mode", ["Login", "Register"])
 
-API_BASE_URL = "https://your-backend-url.onrender.com"
+username = st.sidebar.text_input("Username")
+password = st.sidebar.text_input("Password", type="password")
 
-# ==============================
-# FUNCTIONS
-# ==============================
+def safe_api_call(method, url, **kwargs):
+    try:
+        return requests.request(method, url, timeout=10, **kwargs)
+    except requests.exceptions.RequestException:
+        st.sidebar.error("❌ Backend is not reachable. Check backend service.")
+        st.stop()
 
-def register(username, password):
-    response = requests.post(
-        f"{API_BASE_URL}/register",
-        json={"username": username, "password": password}
-    )
+# -------------------------------
+# Login
+# -------------------------------
+if mode == "Login":
+    if st.sidebar.button("Login"):
+        res = safe_api_call("post", f"{API_URL}/login", json={
+            "username": username,
+            "password": password
+        })
 
-    if response.status_code == 200:
-        st.success("Registration successful ✅ Please login.")
-    else:
-        st.error("Registration failed ❌")
+        if res.status_code == 200:
+            st.session_state.token = res.json().get("access_token")
+            st.sidebar.success("Login successful 🎉")
+        else:
+            st.sidebar.error(res.json().get("detail", "Login failed"))
 
-def login(username, password):
-    response = requests.post(
-        f"{API_BASE_URL}/login",
-        json={"username": username, "password": password}
-    )
+# -------------------------------
+# Register
+# -------------------------------
+if mode == "Register":
+    if st.sidebar.button("Register"):
+        res = safe_api_call("post", f"{API_URL}/register", json={
+            "username": username,
+            "password": password
+        })
 
-    if response.status_code == 200:
-        data = response.json()
-        st.session_state.token = data.get("access_token")
-        st.session_state.username = username
-        st.success("Login successful ✅")
-    else:
-        st.error("Invalid credentials ❌")
+        if res.status_code == 200:
+            st.sidebar.success("Registered successfully 🎉 Now login.")
+        else:
+            st.sidebar.error(res.json().get("detail", "Registration failed"))
 
-def logout():
-    st.session_state.token = None
-    st.session_state.username = None
+# -------------------------------
+# Logout
+# -------------------------------
+if st.session_state.token:
+    if st.sidebar.button("Logout"):
+        st.session_state.token = None
+        st.sidebar.success("Logged out!")
 
-# ==============================
+# -------------------------------
+# Load Model
+# -------------------------------
+pipe = pickle.load(open('pipe.pkl','rb'))
+
+teams = [
+    "Chennai Super Kings", "Mumbai Indians", "Kolkata Knight Riders",
+    "Royal Challengers Bengaluru", "Delhi Capitals", "Sunrisers Hyderabad",
+    "Rajasthan Royals", "Punjab Kings", "Gujarat Titans", "Lucknow Super Giants"
+]
+
+cities = [
+    'Hyderabad','Bangalore','Mumbai','Indore','Kolkata','Delhi','Chandigarh',
+    'Jaipur','Chennai','Cape Town','Port Elizabeth','Durban','Centurion',
+    'East London','Johannesburg','Kimberley','Bloemfontein','Ahmedabad',
+    'Cuttack','Nagpur','Dharamsala','Visakhapatnam','Pune','Raipur','Ranchi',
+    'Abu Dhabi','Sharjah','Mohali','Bengaluru'
+]
+
+# -------------------------------
 # UI
-# ==============================
+# -------------------------------
+st.markdown("<div class='title'>🏏 IPL Win Predictor</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub'>Predict your team’s victory in real-time</div>", unsafe_allow_html=True)
 
-st.title("🏏 IPL Win Predictor")
+with st.container():
+    st.markdown("<div class='glass'>", unsafe_allow_html=True)
 
-if st.session_state.token is None:
+    col1, col2 = st.columns(2)
+    with col1:
+        batting_team = st.selectbox("Batting Team", teams)
+    with col2:
+        bowling_team = st.selectbox("Bowling Team", teams)
 
-    choice = st.radio("Choose Option", ["Login", "Register"])
+    city = st.selectbox("Host City", cities)
 
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+    col3, col4, col5 = st.columns(3)
+    with col3:
+        target = st.number_input("Target", min_value=1)
+    with col4:
+        score = st.number_input("Current Score", min_value=0)
+    with col5:
+        overs = st.number_input("Overs Completed", min_value=0.1, max_value=20.0)
 
-    if choice == "Login":
-        if st.button("Login"):
-            login(username, password)
+    wickets = st.slider("Wickets Fallen", 0, 10, 2)
 
-    if choice == "Register":
-        if st.button("Register"):
-            register(username, password)
+    if st.button("🔥 Predict Match Outcome"):
 
-else:
-    st.success(f"Welcome {st.session_state.username} 🎉")
+        if not st.session_state.token:
+            st.error("🔐 Please login first to predict!")
+            st.stop()
 
-    if st.button("Logout"):
-        logout()
+        payload = {
+            "customer": {
+                "batting_team": batting_team,
+                "bowling_team": bowling_team,
+                "city": city,
+                "target": target,
+                "score": score,
+                "wickets": wickets,
+                "overs": overs
+            }
+        }
 
-    st.subheader("Match Prediction")
-
-    team1 = st.text_input("Team 1")
-    team2 = st.text_input("Team 2")
-    target = st.number_input("Target Score", min_value=0)
-
-    if st.button("Predict"):
         headers = {
             "Authorization": f"Bearer {st.session_state.token}"
         }
 
-        response = requests.post(
-            f"{API_BASE_URL}/predict",
-            json={
-                "batting_team": team1,
-                "bowling_team": team2,
-                "target": target
-            },
-            headers=headers
-        )
+        res = safe_api_call("post", f"{API_URL}/predict/auth", json=payload, headers=headers)
 
-        if response.status_code == 200:
-            st.success(response.json())
+        if res.status_code == 200:
+            data = res.json()
+            st.success(f"🏆 {data['batting_team']} Win Chance: {data['win_probability']:.2f}%")
+            st.error(f"💔 {data['bowling_team']} Win Chance: {data['loss_probability']:.2f}%")
         else:
-            st.error("Prediction failed ❌")
+            st.error(res.json().get("detail", "Token expired or invalid."))
+
+    st.markdown("</div>", unsafe_allow_html=True)
