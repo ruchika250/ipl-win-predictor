@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 
 # ==============================
-# Session State Initialization
+# Session State Init
 # ==============================
 
 if "token" not in st.session_state:
@@ -11,16 +11,22 @@ if "token" not in st.session_state:
 if "username" not in st.session_state:
     st.session_state.username = None
 
-# ==============================
-# CONFIG
-# ==============================
-
-API_BASE_URL = "https://ipl-win-predictor-api.onrender.com"
-# 👆 yaha apna FastAPI backend URL daalna
+API_BASE_URL = "https://your-backend-url.onrender.com"
 
 # ==============================
-# Login Function
+# FUNCTIONS
 # ==============================
+
+def register(username, password):
+    response = requests.post(
+        f"{API_BASE_URL}/register",
+        json={"username": username, "password": password}
+    )
+
+    if response.status_code == 200:
+        st.success("Registration successful ✅ Please login.")
+    else:
+        st.error("Registration failed ❌")
 
 def login(username, password):
     response = requests.post(
@@ -36,38 +42,30 @@ def login(username, password):
     else:
         st.error("Invalid credentials ❌")
 
-# ==============================
-# Logout
-# ==============================
-
 def logout():
     st.session_state.token = None
     st.session_state.username = None
-    st.success("Logged out successfully")
 
 # ==============================
-# UI START
+# UI
 # ==============================
 
 st.title("🏏 IPL Win Predictor")
 
-# ==============================
-# If NOT Logged In
-# ==============================
-
 if st.session_state.token is None:
 
-    st.subheader("Login")
+    choice = st.radio("Choose Option", ["Login", "Register"])
 
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
-    if st.button("Login"):
-        login(username, password)
+    if choice == "Login":
+        if st.button("Login"):
+            login(username, password)
 
-# ==============================
-# If Logged In
-# ==============================
+    if choice == "Register":
+        if st.button("Register"):
+            register(username, password)
 
 else:
     st.success(f"Welcome {st.session_state.username} 🎉")
@@ -97,7 +95,6 @@ else:
         )
 
         if response.status_code == 200:
-            result = response.json()
-            st.success(f"Win Probability: {result}")
+            st.success(response.json())
         else:
             st.error("Prediction failed ❌")
